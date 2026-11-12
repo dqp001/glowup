@@ -21,7 +21,7 @@ const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '
 const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
 const mondayOf = k => addDays(k, -((parseKey(k).getDay() + 6) % 7));
 
-const MEALS = ['Desayuno', 'Colación', 'Comida', 'Cena', 'Snack'];
+const MEALS = ['Desayuno', 'Colación AM', 'Comida', 'Colación PM', 'Cena', 'Extra'];
 const MEASURES = [['cintura', 'Cintura'], ['cadera', 'Cadera'], ['abdomen', 'Abdomen'], ['pecho', 'Pecho / busto'], ['bajobusto', 'Bajo busto'], ['brazo', 'Brazo'], ['muslo', 'Muslo']];
 const LABS = [['glucosa', 'Glucosa en ayunas', 'mg/dL'], ['hba1c', 'HbA1c', '%'], ['insulina', 'Insulina', 'µU/mL'], ['trigliceridos', 'Triglicéridos', 'mg/dL'], ['colesterol', 'Colesterol total', 'mg/dL'], ['hdl', 'HDL', 'mg/dL'], ['ldl', 'LDL', 'mg/dL'], ['presion', 'Presión', 'mmHg']];
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -33,7 +33,7 @@ const DEFAULT_GOALS = {
 };
 const DEFAULT_WEEK = { 0: 'Descanso', 1: 'Pesas', 2: 'Cardio', 3: 'Pesas', 4: 'Cardio', 5: 'Pesas', 6: 'Descanso activo: caminata larga' };
 
-const state = { view: TODAY, tab: 'hoy', recs: new Map(), plate: [], range: 30, calMonth: TODAY.slice(0, 7), calSel: TODAY, mood: null };
+const state = { menuDay: null, view: TODAY, tab: 'hoy', recs: new Map(), plate: [], range: 30, calMonth: TODAY.slice(0, 7), calSel: TODAY, mood: null };
 
 /* ---------- storage ---------- */
 const LS = 'glowup.v1', LSB = 'glowup.lastBackup';
@@ -174,6 +174,7 @@ function renderNow() {
   el.hidden = false;
   el.innerHTML = `<div class="row between"><span class="eyebrow">Ahora toca · ${esc(cur.t)}</span><button class="link" data-go="mas" data-open="secHorario">Ver horario</button></div>
     <strong style="font-size:17px">${esc(cur.what)}</strong>${cur.why ? `<span class="muted small">${esc(cur.why)}</span>` : ''}
+    ${(() => { const mm = menuMealNow(cur.what, cur.t); return mm ? `<span class="small" style="background:var(--sunk);padding:8px 10px;border-radius:10px"><strong>Tu menú:</strong> ${esc(mm.what)} <span class="muted num">· ${mm.kcal} kcal</span></span>` : ''; })()}
     <span class="small">Sigue a las <strong>${esc(nxt.t)}</strong>: ${esc(nxt.what)}</span>
     ${sp ? `<span class="small muted">Esta semana: despertar ${esc(sp.wake)} · dormir ${esc(sp.sleep)}</span>` : ''}`;
 }
@@ -223,6 +224,38 @@ function weekSummary() {
   return lines.filter(Boolean).join('\n');
 }
 
+/* ---------- menú ---------- */
+const menu = () => state.recs.get('menu');
+function menuMacros(day, m) {
+  const t = day.totals || {}, ratio = t.c && t.f ? (t.c * 4) / (t.c * 4 + t.f * 9) : 0.6;
+  const nonP = Math.max(0, m.kcal - m.p * 4);
+  return { kcal: m.kcal, p: m.p, c: r1(nonP * ratio / 4), f: r1(nonP * (1 - ratio) / 9) };
+}
+function menuFor(dow) { return menu()?.days?.[dow]; }
+function renderMenu() {
+  const el = $('#menuBox'), mn = menu();
+  if (!mn) { el.hidden = true; return; }
+  el.hidden = false;
+  const dow = state.menuDay ?? parseKey(state.view).getDay(), day = menuFor(dow);
+  const done = new Set(mealsOn(state.view).map(m => m.menuKey).filter(Boolean));
+  el.innerHTML = `<div class="row between"><h3>Menú de tu nutri</h3><select id="menuDaySel" style="width:auto">${[1, 2, 3, 4, 5, 6, 0].map(i => `<option value="${i}" ${i === dow ? 'selected' : ''}>${DAYS[i]}${i === parseKey(state.view).getDay() ? ' (hoy)' : ''}</option>`).join('')}</select></div>
+    ${day ? `<span class="muted small num">${fmtN(day.totals.kcal)} kcal · P ${day.totals.p} · C ${day.totals.c} · G ${day.totals.f} g. Puedes cambiar un día completo por otro.</span>` +
+    day.meals.map((m, i) => { const key = dow + '-' + i, ok = done.has(key); return `<div class="meal" style="align-items:flex-start"><span class="tag ${ok ? 'accent' : ''}">${esc(m.t)}</span><div class="t"><div style="font-weight:500">${esc(m.what)}</div><div class="muted small num">${m.kcal} kcal · P ${m.p} g</div>
+      <div class="row" style="margin-top:6px">${ok ? '<span class="pill good">✓ Registrado</span>' : `<button class="btn primary small" data-menueat="${key}">Lo comí</button><button class="btn small" data-menuadj="${key}">Con cambios</button>`}</div></div></div>`; }).join('') : '<p class="empty">Sin menú para este día.</p>'}`;
+}
+function menuItem(key) { const [dow, i] = key.split('-').map(Number), day = menuFor(dow); return day ? { day, m: day.meals[i] } : null; }
+function menuMealNow(what, t) {
+  const day = menuFor(parseKey(TODAY).getDay()); if (!day) return null;
+  const name = /Desayuno/i.test(what) ? 'Desayuno' : /Colación/i.test(what) ? (t < '13:00' ? 'Colación AM' : 'Colación PM') : /Comida/i.test(what) ? 'Comida' : /Cena/i.test(what) ? 'Cena' : null;
+  return name ? day.meals.find(m => m.t === name) : null;
+}
+function parseSteps(txt) {
+  const tok = String(txt || '').replace(/[^\d.,\s]/g, ' ').trim().split(/\s+/).find(x => /\d/.test(x));
+  if (!tok) return null;
+  const n = /^\d{1,3}([.,]\d{3})+$/.test(tok) ? +tok.replace(/[.,]/g, '') : parseFloat(tok.replace(',', '.'));
+  return isFinite(n) ? Math.round(n) : null;
+}
+
 /* ---------- comida ---------- */
 function renderComida() {
   const ms = mealsOn(state.view), t = sumMeals(ms), g = goals();
@@ -239,6 +272,7 @@ function renderComida() {
   const ids = [...new Set([...quick, ...defaults])].filter(Boolean).slice(0, 8);
   $('#quickFoods').innerHTML = ids.map(id => `<button class="btn small" data-addfood="${id}">+ ${esc(shortName(getFood(id).name))}</button>`).join('');
   renderPlate();
+  renderMenu();
 }
 const shortName = n => n.replace(/\s*\(.*?\)\s*/g, ' ').trim().split(' ').slice(0, 3).join(' ');
 function searchFoods(q) {
@@ -288,7 +322,7 @@ function addFood(fid) {
   $('#foodSearch').value = ''; searchFoods(''); renderPlate();
   toast(`${shortName(f.name)} agregado a tu plato`);
 }
-function guessMeal() { const h = new Date().getHours(); return h < 11 ? 'Desayuno' : h < 13 ? 'Colación' : h < 17 ? 'Comida' : h < 22 ? 'Cena' : 'Snack'; }
+function guessMeal() { const h = new Date().getHours(); return h < 11 ? 'Desayuno' : h < 13 ? 'Colación AM' : h < 17 ? 'Comida' : h < 19 ? 'Colación PM' : h < 23 ? 'Cena' : 'Extra'; }
 
 /* ---------- charts ---------- */
 function niceRange(lo, hi, n = 4) {
@@ -561,7 +595,7 @@ function setTab(t, openId) {
   if (openId) document.getElementById(openId)?.scrollIntoView({ block: 'start' }); else window.scrollTo(0, 0);
 }
 function setView(k) {
-  state.view = k; state.mood = null; $('#diaryText').dataset.dirty = '';
+  state.view = k; state.mood = null; state.menuDay = null; $('#diaryText').dataset.dirty = '';
   ['#wDate', '#msDate', '#woDate', '#labDate'].forEach(s => $(s).value = k);
   render();
 }
@@ -575,10 +609,14 @@ $$('#rangeSeg button').forEach(b => b.onclick = () => { state.range = +b.dataset
 $('#foodSearch').addEventListener('input', e => searchFoods(e.target.value));
 
 document.addEventListener('click', e => {
-  const el = e.target.closest('[data-del],[data-water],[data-quickwo],[data-userecipe],[data-go],[data-mood],[data-addfood],[data-prm],[data-cal],[data-openday],#pClear,#pSave,#pRecipe,#pRecipeOk');
+  const el = e.target.closest('[data-menueat],[data-menuadj],#pasteSteps,[data-del],[data-water],[data-quickwo],[data-userecipe],[data-go],[data-mood],[data-addfood],[data-prm],[data-cal],[data-openday],#pClear,#pSave,#pRecipe,#pRecipeOk');
   if (!el) return;
   const ds = el.dataset;
-  if (ds.del) { del(ds.del); toast('Borrado'); }
+  if (ds.menueat) { const it = menuItem(ds.menueat); if (it) { const mc = menuMacros(it.day, it.m); put({ kind: 'meal', date: state.view, meal: it.m.t, name: it.m.what.slice(0, 120), ...mc, items: [], menuKey: ds.menueat }); toast(it.m.t + ' registrado ✅'); } }
+  else if (ds.menuadj) { const it = menuItem(ds.menuadj); if (it) { const mc = menuMacros(it.day, it.m); const dt = $('#manualForm').closest('details'); dt.open = true;
+    $('#mName').value = it.m.what.slice(0, 120); $('#mKcal').value = mc.kcal; $('#mP').value = mc.p; $('#mC').value = mc.c; $('#mF').value = mc.f; $('#mMeal').value = it.m.t; dt.scrollIntoView({ block: 'start' }); toast('Cambia lo que sea distinto y toca Registrar'); } }
+  else if (el.id === 'pasteSteps') { pasteSteps(); }
+  else if (ds.del) { del(ds.del); toast('Borrado'); }
   else if (ds.water) { const n = +ds.water, d = dayRec(state.view); patchDay(state.view, { water: d.water === n ? n - 1 : n }); }
   else if ('quickwo' in ds) { put({ kind: 'workout', date: state.view, type: (planFor(state.view).title || 'Entrenamiento').split('\n')[0].slice(0, 60), min: null, note: '' }); toast('Entrenamiento registrado 💪'); }
   else if (ds.userecipe) { const r = state.recs.get(ds.userecipe); if (r) { put({ ...r, used: (r.used || 0) + 1 }, true); put({ kind: 'meal', date: state.view, meal: guessMeal(), name: r.name, kcal: r0(r.kcal), p: r1(r.p), c: r1(r.c), f: r1(r.f), items: r.items || [] }); toast(`${r.name} registrado`); } }
@@ -610,11 +648,19 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'menuDaySel') { state.menuDay = +t.value; renderMenu(); return; }
   if (t.dataset.pmode != null) { const it = state.plate[+t.dataset.pmode], f = getFood(it?.fid); if (it && f) { const g = itemGrams(it); it.mode = t.value; it.qty = t.value === 'u' ? r1(g / f.ug) : r0(g); renderPlate(); } }
   if (t.dataset.habit != null) { const g = goals(), d = dayRec(state.view), h = g.habits[+t.dataset.habit]; patchDay(state.view, { habits: { ...(d.habits || {}), [h]: t.checked } }); }
   if (t.dataset.todo) { const x = state.recs.get(t.dataset.todo); if (x) put({ ...x, done: t.checked }); }
 });
 
+async function pasteSteps() {
+  let txt = null;
+  try { txt = await navigator.clipboard.readText(); } catch (e) { }
+  const n = parseSteps(txt);
+  if (n == null) { $('#stepInput').focus(); toast('No encontré pasos copiados. Corre el atajo “Pasos Glow Up” o pégalos aquí.'); return; }
+  patchDay(state.view, { steps: n }); toast(`${fmtN(n)} pasos guardados desde Salud`);
+}
 $('#stepForm').onsubmit = e => { e.preventDefault(); const v = num($('#stepInput').value); patchDay(state.view, { steps: v == null ? null : r0(v) }); $('#stepInput').blur(); toast('Pasos guardados'); };
 $('#mMeal').innerHTML = MEALS.map(m => `<option ${m === guessMeal() ? 'selected' : ''}>${m}</option>`).join('');
 $('#manualForm').onsubmit = e => { e.preventDefault();

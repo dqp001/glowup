@@ -118,3 +118,16 @@ window.FOODS = [
   ['Cerveza', 43, 0.5, 3.6, 0, '1 lata', 355],
   ['Cerveza light', 29, 0.2, 1.6, 0, '1 lata', 355],
 ];
+window.FOODS.push(
+  ['Queso manchego', 375, 25, 1, 30, '1 rebanada', 20],
+  ['Pistaches', 560, 20, 28, 45, '12 piezas', 8],
+  ['Mandarina', 53, 0.8, 13, 0.3, '1 pieza', 75],
+  ['Galleta de avena', 450, 6, 68, 17, '1 galleta', 20],
+  ['Aderezo ranch light', 240, 1, 12, 20, '1 cucharada', 15],
+  ['Aderezo césar light', 250, 1, 10, 22, '1 cucharada', 15],
+  ['Salsa de soya', 53, 8, 5, 0.6, '1 cucharada', 16],
+  ['Chile poblano', 20, 1, 4.6, 0.2, '1 pieza', 100],
+  ['Carne de res deshebrada', 220, 30, 0, 11, '1/2 taza', 70],
+  ['Yogurt griego natural (1/2 taza)', 59, 10, 3.6, 0.4, '1/2 taza', 115],
+  ['Ensalada de nopales', 25, 1.4, 4, 0.5, '1 taza', 150]
+);

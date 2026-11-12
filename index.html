@@ -211,6 +211,7 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
         <div class="row between"><h3>Pasos</h3><span id="stepPill"></span></div>
         <div class="row" style="align-items:baseline"><span class="val num" id="stepVal">0</span><span class="muted small" id="stepGoal"></span></div>
         <div class="bar"><i id="stepBar"></i></div>
+        <button class="btn small" id="pasteSteps" style="align-self:flex-start">Traer pasos de Salud</button>
         <form class="stepin" id="stepForm" autocomplete="off">
           <input type="number" id="stepInput" inputmode="numeric" placeholder="Pasos de la app Salud" min="0">
           <button class="btn">Guardar</button>
@@ -249,8 +250,9 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
 
   <!-- COMIDA -->
   <section class="tab" id="tab-comida" hidden>
+    <div class="block" id="menuBox" hidden></div>
     <div class="block">
-      <h2>Registrar comida</h2>
+      <h2>Otra comida</h2>
       <input type="search" id="foodSearch" placeholder="Buscar alimento: pollo, huevo, tortilla…" autocomplete="off">
       <div class="results" id="foodResults" hidden></div>
       <div class="row" id="quickFoods"></div>
@@ -444,6 +446,33 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
         <label class="f">Checklist diario (uno por línea)<textarea id="gHabits" rows="7"></textarea></label>
         <div class="row"><button class="btn primary">Guardar metas</button></div>
       </form>
+    </details>
+
+    <details class="sec" id="secIphone">
+      <summary>Conectar con tu iPhone</summary>
+      <div class="body small">
+        <h3>Pasos desde Salud (atajo)</h3>
+        <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+          <li>Abre la app <strong>Atajos</strong> → toca <strong>+</strong> → <strong>Agregar acción</strong>.</li>
+          <li>Busca <strong>Buscar muestras de Salud</strong>. Toca el tipo y elige <strong>Pasos</strong>. Toca <strong>Agregar filtro</strong> y déjalo en <strong>Fecha de inicio · es hoy</strong>.</li>
+          <li>Agrega <strong>Calcular estadísticas</strong> y elige <strong>Suma</strong>.</li>
+          <li>Agrega <strong>Copiar al portapapeles</strong>.</li>
+          <li>Agrega <strong>Mostrar notificación</strong> y escribe: “Pasos copiados. Abre Glow Up”.</li>
+          <li>Ponle de nombre <strong>Pasos Glow Up</strong>. La primera vez te pide permiso para leer Salud: acéptalo.</li>
+          <li>Para que corra solo: <strong>Automatización → + → Hora del día → 21:00 → Diariamente → Ejecutar inmediatamente</strong> y elige tu atajo.</li>
+        </ol>
+        <p style="margin:0">Después abre Glow Up y toca <strong>Traer pasos de Salud</strong> en Hoy. Si el iPhone te muestra la burbuja <strong>Pegar</strong>, tócala.</p>
+        <h3>Horario de sueño y alarma</h3>
+        <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+          <li>Abre <strong>Salud → Navegar → Sueño</strong> → <strong>Horario completo y opciones</strong>.</li>
+          <li>Activa <strong>Horario de sueño</strong> y crea uno para todos los días con la hora de esta semana (la ves en Mi horario).</li>
+          <li>Activa la <strong>Alarma</strong> y en <strong>Relajación</strong> pon 45 min: a esa hora tu iPhone te avisa que dejes el celular.</li>
+          <li>Activa <strong>Usar horario para el enfoque Sueño</strong>: silencia notificaciones mientras duermes.</li>
+          <li>Cada lunes de la transición cambia la hora (el calendario te lo recuerda).</li>
+        </ol>
+        <h3>Calendario</h3>
+        <p style="margin:0">Abre el archivo <strong>glowup-calendario.ics</strong> que te mandó Claude y toca <strong>Agregar todo</strong>. Te recomiendo crear antes un calendario llamado “Glow Up” en la app Calendario para poder ocultarlo o borrarlo fácil.</p>
+      </div>
     </details>
 
     <details class="sec" id="secDatos">
