@@ -200,6 +200,7 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
 
   <!-- HOY -->
   <section class="tab" id="tab-hoy">
+    <div class="card block" id="nowCard" hidden></div>
     <div class="block" id="topTips"></div>
     <div class="card hero">
       <div class="ring" id="ring"></div>
@@ -216,6 +217,8 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
         </form>
       </div>
       <div class="block">
+        <div class="row between"><h3>Sueño</h3><span class="muted small">horas que dormiste anoche</span></div>
+        <form class="stepin" id="sleepForm" autocomplete="off"><input type="number" id="sleepInput" inputmode="decimal" step="0.5" min="0" max="16" placeholder="ej. 7.5"><button class="btn">Guardar</button></form>
         <div class="row between"><h3>Agua</h3><span class="muted small num" id="waterLbl"></span></div>
         <div class="water" id="water"></div>
       </div>
@@ -309,6 +312,7 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
         <button class="btn primary" style="align-self:flex-end">Guardar</button>
       </form>
     </div>
+    <div class="block card" id="blocks" hidden></div>
     <div class="block">
       <h3>Metas por etapas</h3>
       <div class="miles" id="miles"></div>
@@ -362,8 +366,15 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
   <section class="tab" id="tab-mas" hidden>
     <div class="block">
       <h2>Recomendaciones</h2>
+      <div class="row"><button class="btn primary" id="copySummary">Copiar resumen de la semana para Claude</button></div>
+      <textarea id="summaryBox" rows="8" hidden readonly></textarea>
       <div class="block" id="tips"></div>
     </div>
+
+    <details class="sec" id="secHorario" open>
+      <summary>Mi horario</summary>
+      <div class="body" id="horario"></div>
+    </details>
 
     <details class="sec" id="secSalud" open>
       <summary>Salud y consultas</summary>
@@ -407,6 +418,7 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
           <div class="row"><button class="btn primary">Guardar</button></div>
         </form>
         <div class="row between"><h3>Plan semanal</h3><button class="link" id="saveWeek">Guardar plan</button></div>
+        <p class="muted small" style="margin:0">[X] y [Y] cambian solos a A o B según la semana del plan.</p>
         <div class="block" id="week"></div>
         <h3>Historial</h3>
         <div id="woList"></div>
