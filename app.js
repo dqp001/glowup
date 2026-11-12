@@ -89,7 +89,7 @@ function dayColor(st) {
 /* ---------- foods ---------- */
 const BUILTIN = (window.FOODS || []).map((f, i) => ({ id: 'b' + i, name: f[0], k: f[1], p: f[2], c: f[3], f: f[4], u: f[5], ug: f[6] }));
 const foodsAll = () => [...all('food'), ...BUILTIN];
-const getFood = id => id && id[0] === 'b' ? BUILTIN[+id.slice(1)] : state.recs.get(id);
+const getFood = id => id && id[0] === 'b' && /^b\d+$/.test(id) ? BUILTIN[+id.slice(1)] : state.recs.get(id) || offCache.get(id);
 function macrosOf(food, grams) { const m = grams / 100; return { kcal: food.k * m, p: food.p * m, c: food.c * m, f: food.f * m }; }
 function itemGrams(it) { const f = getFood(it.fid); if (!f) return 0; return it.mode === 'u' ? it.qty * f.ug : it.qty; }
 function usage() {
@@ -256,6 +256,72 @@ function parseSteps(txt) {
   return isFinite(n) ? Math.round(n) : null;
 }
 
+/* ---------- base de datos mundial (Open Food Facts) ---------- */
+const OFF_FIELDS = 'code,product_name,product_name_es,brands,nutriments,serving_size,serving_quantity';
+const offCache = new Map();
+function offToFood(pr) {
+  if (!pr) return null;
+  const n = pr.nutriments || {};
+  let k = num(n['energy-kcal_100g']); if (k == null && num(n.energy_100g) != null) k = num(n.energy_100g) / 4.184;
+  const name = (pr.product_name_es || pr.product_name || '').trim();
+  if (k == null || !name) return null;
+  const brand = Array.isArray(pr.brands) ? pr.brands[0] : String(pr.brands || '').split(',')[0].trim();
+  const sq = num(pr.serving_quantity);
+  const f = { id: 'off_' + (pr.code || name.replace(/\W+/g, '').slice(0, 20)), kind: 'food', src: 'off', code: pr.code || '', name: name + (brand ? ' · ' + brand : ''),
+    k: r1(k), p: r1(num(n.proteins_100g) || 0), c: r1(num(n.carbohydrates_100g) || 0), f: r1(num(n.fat_100g) || 0),
+    u: sq ? (pr.serving_size || sq + ' g') : '100 g', ug: sq || 100 };
+  offCache.set(f.id, f); return f;
+}
+const withTimeout = (url, ms = 12000) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { signal: c.signal }).finally(() => clearTimeout(t)); };
+async function offSearch(q) {
+  try {
+    const r = await withTimeout(`https://search.openfoodfacts.org/search?q=${encodeURIComponent(q)}&page_size=24&langs=es&fields=${OFF_FIELDS}`);
+    if (r.ok) { const j = await r.json(); if (Array.isArray(j.hits) && j.hits.length) return j.hits; }
+  } catch (e) { }
+  const r = await withTimeout(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=24&fields=${OFF_FIELDS}`);
+  const j = await r.json(); return j.products || [];
+}
+async function runOffSearch(q) {
+  const el = $('#offResults'); el.hidden = false;
+  if (!navigator.onLine) { el.innerHTML = '<div class="res"><span class="muted">Necesitas internet para buscar en la base de datos. Lo que ya agregaste antes sí funciona sin internet.</span></div>'; return; }
+  el.innerHTML = '<div class="res"><span class="muted">Buscando en la base de datos…</span></div>';
+  try {
+    const list = (await offSearch(q)).map(offToFood).filter(Boolean);
+    el.innerHTML = list.length ? `<div class="res"><span class="eyebrow">Productos de marca · Open Food Facts</span></div>` + list.map(f => `<button class="res" data-offadd="${esc(f.id)}"><span><span class="n">${esc(f.name)}</span><br><span class="muted small">${r0(f.k)} kcal por 100 g · ${esc(f.u)} = ${r0(macrosOf(f, f.ug).kcal)} kcal · P ${r1(f.p * f.ug / 100)} g</span></span><span class="link">Agregar</span></button>`).join('')
+      : `<div class="res"><span class="muted">No encontré “${esc(q)}”. Prueba con otra palabra o con la marca, escanea el código o créalo con la etiqueta.</span></div>`;
+  } catch (e) { el.innerHTML = '<div class="res"><span class="muted">La base de datos no respondió. Intenta de nuevo en un momento.</span></div>'; }
+}
+function saveOffFood(f) { const ex = state.recs.get(f.id); if (!ex) put({ ...f }, true); return f.id; }
+async function lookupBarcode(code) {
+  code = String(code || '').replace(/\D/g, '');
+  if (code.length < 8) { toast('Ese código no parece válido'); return; }
+  const local = all('food').find(f => f.code === code);
+  if (local) { addFood(local.id); return; }
+  if (!navigator.onLine) { toast('Necesitas internet para buscar ese código'); return; }
+  toast('Buscando producto…');
+  try {
+    const r = await withTimeout(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${OFF_FIELDS}`);
+    const j = await r.json(); const f = j && j.status === 1 ? offToFood({ ...j.product, code }) : null;
+    if (f) { addFood(saveOffFood(f)); return; }
+    toast('Ese producto no está en la base de datos. Créalo con su etiqueta.');
+    const dt = $('#foodForm').closest('details'); dt.open = true; $('#nfName').focus(); state.pendingCode = code; dt.scrollIntoView({ block: 'start' });
+  } catch (e) { toast('No se pudo consultar. Revisa tu internet.'); }
+}
+let zxReady = null, reader = null;
+function loadZX() { return zxReady || (zxReady = new Promise((ok, no) => { if (window.ZXing) return ok(); const sc = document.createElement('script'); sc.src = 'zxing.min.js'; sc.onload = ok; sc.onerror = () => { zxReady = null; no(); }; document.head.appendChild(sc); })); }
+async function openScanner() {
+  $('#scanner').hidden = false; $('#scanMsg').textContent = 'Abriendo la cámara…'; $('#scanCode').value = '';
+  try {
+    await loadZX();
+    const F = ZXing.BarcodeFormat, hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+    reader = new ZXing.BrowserMultiFormatReader(hints);
+    await reader.decodeFromConstraints({ video: { facingMode: { ideal: 'environment' } } }, $('#scanVideo'), res => { if (res && reader) { const c = res.getText(); closeScanner(); lookupBarcode(c); } });
+    $('#scanMsg').textContent = 'Apunta al código de barras del empaque';
+  } catch (e) { $('#scanMsg').textContent = 'No se pudo abrir la cámara. Dale permiso en Ajustes o escribe el número del código abajo.'; }
+}
+function closeScanner() { try { reader?.reset(); } catch (e) { } reader = null; $('#scanner').hidden = true; }
+
 /* ---------- comida ---------- */
 function renderComida() {
   const ms = mealsOn(state.view), t = sumMeals(ms), g = goals();
@@ -282,8 +348,10 @@ function searchFoods(q) {
   const u = usage();
   const res = foodsAll().filter(f => words.every(w => norm(f.name).includes(w))).sort((a, b) => (u.get(b.id) || 0) - (u.get(a.id) || 0) || a.name.length - b.name.length).slice(0, 25);
   el.hidden = false;
-  el.innerHTML = res.length ? res.map(f => `<button class="res" data-addfood="${f.id}"><span><span class="n">${esc(f.name)}</span><br><span class="muted small">${esc(f.u)} = ${r0(macrosOf(f, f.ug).kcal)} kcal</span></span><span class="link">Agregar</span></button>`).join('')
-    : `<div class="res"><span class="muted">No está en la lista. Créalo abajo en “Crear alimento nuevo” o usa “Agregar calorías rápido”.</span></div>`;
+  $('#offResults').hidden = true;
+  const offBtn = `<button class="res" data-offsearch="1"><span><span class="n">🌎 Buscar “${esc(q)}” en la base de datos</span><br><span class="muted small">Miles de productos de marca de México y el mundo (necesita internet)</span></span><span class="link">Buscar</span></button>`;
+  el.innerHTML = offBtn + (res.length ? res.map(f => `<button class="res" data-addfood="${f.id}"><span><span class="n">${esc(f.name)}</span><br><span class="muted small">${esc(f.u)} = ${r0(macrosOf(f, f.ug).kcal)} kcal</span></span><span class="link">Agregar</span></button>`).join('')
+    : `<div class="res"><span class="muted">No está en tu lista. Búscalo en la base de datos (arriba) o créalo con la etiqueta.</span></div>`);
 }
 function renderPlate() {
   const el = $('#plate');
@@ -607,12 +675,18 @@ $('#calPrev').onclick = () => { const [y, m] = state.calMonth.split('-').map(Num
 $('#calNext').onclick = () => { const [y, m] = state.calMonth.split('-').map(Number); const d = new Date(y, m, 1); state.calMonth = d.getFullYear() + '-' + pad(d.getMonth() + 1); render(); };
 $$('#rangeSeg button').forEach(b => b.onclick = () => { state.range = +b.dataset.range; render(); });
 $('#foodSearch').addEventListener('input', e => searchFoods(e.target.value));
+$('#foodSearch').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { e.preventDefault(); runOffSearch(e.target.value.trim()); } });
 
 document.addEventListener('click', e => {
-  const el = e.target.closest('[data-menueat],[data-menuadj],#pasteSteps,[data-del],[data-water],[data-quickwo],[data-userecipe],[data-go],[data-mood],[data-addfood],[data-prm],[data-cal],[data-openday],#pClear,#pSave,#pRecipe,#pRecipeOk');
+  const el = e.target.closest('[data-offsearch],[data-offadd],#scanBtn,#scanClose,#scanGo,[data-menueat],[data-menuadj],#pasteSteps,[data-del],[data-water],[data-quickwo],[data-userecipe],[data-go],[data-mood],[data-addfood],[data-prm],[data-cal],[data-openday],#pClear,#pSave,#pRecipe,#pRecipeOk');
   if (!el) return;
   const ds = el.dataset;
-  if (ds.menueat) { const it = menuItem(ds.menueat); if (it) { const mc = menuMacros(it.day, it.m); put({ kind: 'meal', date: state.view, meal: it.m.t, name: it.m.what.slice(0, 120), ...mc, items: [], menuKey: ds.menueat }); toast(it.m.t + ' registrado ✅'); } }
+  if (ds.offsearch) { runOffSearch($('#foodSearch').value.trim()); }
+  else if (ds.offadd) { const f = offCache.get(ds.offadd); if (f) { $('#offResults').hidden = true; addFood(saveOffFood(f)); } }
+  else if (el.id === 'scanBtn') openScanner();
+  else if (el.id === 'scanClose') closeScanner();
+  else if (el.id === 'scanGo') { const c = $('#scanCode').value; closeScanner(); lookupBarcode(c); }
+  else if (ds.menueat) { const it = menuItem(ds.menueat); if (it) { const mc = menuMacros(it.day, it.m); put({ kind: 'meal', date: state.view, meal: it.m.t, name: it.m.what.slice(0, 120), ...mc, items: [], menuKey: ds.menueat }); toast(it.m.t + ' registrado ✅'); } }
   else if (ds.menuadj) { const it = menuItem(ds.menuadj); if (it) { const mc = menuMacros(it.day, it.m); const dt = $('#manualForm').closest('details'); dt.open = true;
     $('#mName').value = it.m.what.slice(0, 120); $('#mKcal').value = mc.kcal; $('#mP').value = mc.p; $('#mC').value = mc.c; $('#mF').value = mc.f; $('#mMeal').value = it.m.t; dt.scrollIntoView({ block: 'start' }); toast('Cambia lo que sea distinto y toca Registrar'); } }
   else if (el.id === 'pasteSteps') { pasteSteps(); }
@@ -669,8 +743,8 @@ $('#manualForm').onsubmit = e => { e.preventDefault();
 $('#foodForm').onsubmit = e => { e.preventDefault();
   const gr = num($('#nfG').value), k = num($('#nfK').value) || 0, p = num($('#nfP').value) || 0, c = num($('#nfC').value) || 0, f = num($('#nfF').value) || 0;
   const base = gr ? 100 / gr : 1;
-  put({ kind: 'food', name: $('#nfName').value.trim(), u: $('#nfUnit').value.trim(), ug: gr || 100, noG: !gr, k: k * (gr ? base : 1), p: p * (gr ? base : 1), c: c * (gr ? base : 1), f: f * (gr ? base : 1) });
-  e.target.reset(); toast('Alimento guardado. Ya lo puedes buscar.'); };
+  put({ kind: 'food', code: state.pendingCode || '', name: $('#nfName').value.trim(), u: $('#nfUnit').value.trim(), ug: gr || 100, noG: !gr, k: k * (gr ? base : 1), p: p * (gr ? base : 1), c: c * (gr ? base : 1), f: f * (gr ? base : 1) });
+  state.pendingCode = null; e.target.reset(); toast('Alimento guardado. Ya lo puedes buscar.'); };
 $('#todoForm').onsubmit = e => { e.preventDefault(); const v = $('#todoText').value.trim(); if (!v) return; put({ kind: 'todo', date: state.view, text: v, done: false }); $('#todoText').value = ''; };
 $('#saveDiary').onclick = () => { const t = $('#diaryText'); patchDay(state.view, { note: t.value.trim(), mood: state.mood ?? dayRec(state.view).mood }); t.dataset.dirty = ''; toast('Diario guardado'); };
 

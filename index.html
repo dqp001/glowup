@@ -253,8 +253,9 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
     <div class="block" id="menuBox" hidden></div>
     <div class="block">
       <h2>Otra comida</h2>
-      <input type="search" id="foodSearch" placeholder="Buscar alimento: pollo, huevo, tortilla…" autocomplete="off">
+      <div class="row" style="flex-wrap:nowrap"><input type="search" id="foodSearch" placeholder="Buscar: pollo, tacos, yogurt Lala…" autocomplete="off" enterkeyhint="search"><button class="btn" id="scanBtn" aria-label="Escanear código de barras" style="flex:none">📷 Código</button></div>
       <div class="results" id="foodResults" hidden></div>
+      <div class="results" id="offResults" hidden></div>
       <div class="row" id="quickFoods"></div>
     </div>
     <div id="plate"></div>
@@ -508,6 +509,12 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
   </div>
 </nav>
 <div class="toast" id="toast" hidden></div>
+<div id="scanner" hidden style="position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px,env(safe-area-inset-left,0px));gap:12px;color:#fff">
+  <div class="row between"><strong style="font-size:17px">Escanear código de barras</strong><button class="btn small" id="scanClose" style="color:var(--fg)">Cerrar</button></div>
+  <div style="flex:1;min-height:0;position:relative;border-radius:16px;overflow:hidden;background:#111"><video id="scanVideo" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video><div style="position:absolute;left:12%;right:12%;top:42%;height:16%;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 999px rgb(0 0 0/.35)"></div></div>
+  <p id="scanMsg" style="margin:0;text-align:center"></p>
+  <div class="row" style="flex-wrap:nowrap"><input type="text" id="scanCode" inputmode="numeric" placeholder="O escribe el número del código" style="color:var(--fg)"><button class="btn primary" id="scanGo" style="flex:none">Buscar</button></div>
+</div>
 
 <script src="foods.js"></script>
 <script src="app.js"></script>
