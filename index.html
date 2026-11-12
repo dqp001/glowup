@@ -199,6 +199,25 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
   </header>
 
   <!-- HOY -->
+  <section class="card block" id="setup" hidden style="margin-bottom:22px">
+    <h2>Te damos la bienvenida a Glow Up ✨</h2>
+    <p class="small" style="margin:0">Cuéntanos de ti para calcular tus metas. Tus datos se guardan solo en este celular.</p>
+    <form class="block" id="setupForm" autocomplete="off">
+      <div class="fields">
+        <label class="f">Sexo<select id="suSexo"><option value="m">Mujer</option><option value="h">Hombre</option></select></label>
+        <label class="f">Edad<input type="number" id="suEdad" inputmode="numeric" min="14" max="90"></label>
+        <label class="f">Estatura (cm)<input type="number" id="suCm" inputmode="decimal" min="120" max="220" placeholder="ej. 172"></label>
+        <label class="f">Peso actual (kg)<input type="number" id="suKg" inputmode="decimal" step="0.1" min="30"></label>
+        <label class="f">Peso meta (kg)<input type="number" id="suGoal" inputmode="decimal" step="0.1" placeholder="opcional"></label>
+      </div>
+      <label class="f">¿Qué tan activo/a eres?<select id="suAct"><option value="s">Poco: casi todo el día sentado/a</option><option value="l" selected>Ligero: camino o entreno 1–3 días</option><option value="a">Activo: entreno 3–5 días</option><option value="m">Muy activo: entreno 6–7 días o trabajo físico</option></select></label>
+      <label class="f">Objetivo<select id="suObj"><option value="bajar">Bajar grasa</option><option value="mantener">Mantener y tonificar</option><option value="ganar">Ganar músculo</option></select></label>
+      <label class="f">¿Tu nutriólogo/a ya te dio calorías? Escríbelas aquí (opcional)<input type="number" id="suKcal" inputmode="numeric" min="1000" placeholder="ej. 2200"></label>
+      <div class="block" id="suPreview"></div>
+      <div class="row"><button class="btn primary">Empezar</button><button type="button" class="btn" id="suPlan">Ya tengo un plan (abrir archivo)</button><button type="button" class="link" id="suSkip">Ahora no</button></div>
+    </form>
+  </section>
+
   <section class="tab" id="tab-hoy">
     <div class="card block" id="nowCard" hidden></div>
     <div class="block" id="topTips"></div>
@@ -445,7 +464,7 @@ nav.tabs button[aria-current=page]{color:var(--accent)}
         <span class="eyebrow">Medidas meta (cm)</span>
         <div class="fields" id="goalMeasureFields"></div>
         <label class="f">Checklist diario (uno por línea)<textarea id="gHabits" rows="7"></textarea></label>
-        <div class="row"><button class="btn primary">Guardar metas</button></div>
+        <div class="row"><button class="btn primary">Guardar metas</button><button type="button" class="btn" id="redoSetup">Recalcular con mis datos</button></div>
       </form>
     </details>
 

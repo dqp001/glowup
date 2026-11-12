@@ -28,8 +28,8 @@ const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 const MOODS = ['😩 Mal', '😕 Meh', '🙂 Bien', '😊 Muy bien', '✨ Brillando'];
 const DEFAULT_GOALS = {
   kcal: 1500, protein: 105, carbs: 145, fat: 50, steps: 10000, stepsMin: 7000, water: 10, start: null, weight: null, measures: {},
-  habits: ['Caminar 10–15 min después del desayuno', 'Caminar 10–15 min después de la comida', 'Caminar 10–15 min después de la cena',
-    'Proteína en cada comida', 'Verdura primero en el plato', 'Cero calorías líquidas', 'Pesar la comida y medir el aceite', 'Dormir 7–8 horas']
+  habits: ['Proteína en cada comida', 'Verdura primero en el plato', 'Registrar antes de comer', 'Cero calorías líquidas',
+    'Caminar 10 min después de comer', 'Dormir 7–8 horas']
 };
 const DEFAULT_WEEK = { 0: 'Descanso', 1: 'Pesas', 2: 'Cardio', 3: 'Pesas', 4: 'Cardio', 5: 'Pesas', 6: 'Descanso activo: caminata larga' };
 
@@ -321,6 +321,48 @@ async function openScanner() {
   } catch (e) { $('#scanMsg').textContent = 'No se pudo abrir la cámara. Dale permiso en Ajustes o escribe el número del código abajo.'; }
 }
 function closeScanner() { try { reader?.reset(); } catch (e) { } reader = null; $('#scanner').hidden = true; }
+
+/* ---------- bienvenida / calcular metas ---------- */
+function calcGoals(pf) {
+  const { sexo, edad, cm, kg, act, obj } = pf;
+  const bmr = 10 * kg + 6.25 * cm - 5 * edad + (sexo === 'h' ? 5 : -161);
+  const tdee = bmr * ({ s: 1.2, l: 1.375, a: 1.55, m: 1.725 }[act] || 1.2);
+  let kcal = obj === 'bajar' ? tdee - 500 : obj === 'ganar' ? tdee + 250 : tdee;
+  kcal = Math.max(sexo === 'h' ? 1500 : 1200, Math.round(kcal / 50) * 50);
+  const m = cm / 100, bmi = kg / (m * m), refKg = bmi >= 30 ? 25 * m * m : kg;
+  const protein = Math.round(refKg * (obj === 'ganar' ? 2 : obj === 'bajar' ? 1.8 : 1.6));
+  const fat = Math.round(kcal * 0.27 / 9), carbs = Math.max(50, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  const water = Math.min(14, Math.max(8, Math.round(kg * 35 / 250)));
+  return { kcal, protein, carbs, fat, water, tdee: Math.round(tdee), bmi: r1(bmi) };
+}
+function readSetup() {
+  const pf = { sexo: $('#suSexo').value, edad: num($('#suEdad').value), cm: num($('#suCm').value), kg: num($('#suKg').value), act: $('#suAct').value, obj: $('#suObj').value };
+  return pf.edad && pf.cm && pf.kg ? pf : null;
+}
+function previewSetup() {
+  const pf = readSetup(), el = $('#suPreview');
+  if (!pf) { el.innerHTML = '<p class="empty">Llena tu edad, estatura y peso para ver tus metas.</p>'; return; }
+  const g = calcGoals(pf), kc = num($('#suKcal').value);
+  el.innerHTML = `<div class="kv"><div><span class="eyebrow">Calorías</span><b>${fmtN(kc || g.kcal)}</b></div><div><span class="eyebrow">Proteína</span><b>${g.protein} g</b></div><div><span class="eyebrow">Agua</span><b>${g.water} vasos</b></div></div>
+    <span class="muted small">Gastas unas ${fmtN(g.tdee)} kcal al día (cálculo Mifflin-St Jeor). ${kc ? 'Usaremos las calorías de tu nutriólogo/a.' : pf.obj === 'bajar' ? 'Te dejamos unas 500 kcal abajo para bajar ~0.5 kg por semana.' : pf.obj === 'ganar' ? 'Te dejamos unas 250 kcal arriba para ganar músculo.' : 'Para mantener tu peso.'} Todo lo puedes cambiar después en Más → Mis metas.</span>`;
+}
+function openSetup() {
+  const g = state.recs.get('goals'), pf = g?.profile;
+  if (pf) { $('#suSexo').value = pf.sexo; $('#suEdad').value = pf.edad; $('#suCm').value = pf.cm; $('#suAct').value = pf.act; $('#suObj').value = pf.obj; }
+  const lw = latestWeight(); if (lw) $('#suKg').value = lw.kg;
+  if (g?.weight) $('#suGoal').value = g.weight;
+  setTab('hoy'); $('#setup').hidden = false; previewSetup(); window.scrollTo(0, 0);
+}
+function saveSetup(e) {
+  e.preventDefault();
+  const pf = readSetup(); if (!pf) { toast('Llena edad, estatura y peso'); return; }
+  const c = calcGoals(pf), kc = num($('#suKcal').value);
+  const cur = state.recs.get('goals') || {};
+  const kcal = kc || c.kcal, fat = kc ? Math.round(kc * 0.27 / 9) : c.fat, carbs = kc ? Math.max(50, Math.round((kc - c.protein * 4 - fat * 9) / 4)) : c.carbs;
+  put({ ...cur, id: 'goals', kind: 'goals', profile: pf, kcal, protein: c.protein, carbs, fat, water: c.water, start: cur.start || r1(pf.kg), weight: num($('#suGoal').value) ?? cur.weight ?? null }, true);
+  if (!weightOn(TODAY)) put({ kind: 'weight', date: TODAY, kg: r1(pf.kg) }, true);
+  $('#setup').hidden = true; render(); toast('¡Listo! Tus metas están configuradas ✨');
+}
 
 /* ---------- comida ---------- */
 function renderComida() {
@@ -649,7 +691,7 @@ function importData(text) {
     if (j.type === 'plan' && r.kind === 'goals' && cur) r = { ...cur, ...r, measures: { ...(cur.measures || {}), ...(r.measures || {}) } };
     if (j.type === 'plan' || !cur || (r.updated || 0) >= (cur.updated || 0)) { state.recs.set(r.id, { ...r, updated: j.type === 'plan' ? Date.now() : r.updated }); n++; }
   });
-  save(); $$('[data-dirty]').forEach(x => x.dataset.dirty = '');
+  save(); $$('[data-dirty]').forEach(x => x.dataset.dirty = ''); if (state.recs.has('goals')) $('#setup').hidden = true;
   toast(j.type === 'plan' ? 'Plan cargado ✨' : `Respaldo cargado (${n} registros)`); render();
 }
 
@@ -786,5 +828,13 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 
 load();
 setView(TODAY);
+$('#setupForm').onsubmit = saveSetup;
+$('#setupForm').addEventListener('input', previewSetup);
+$('#setupForm').addEventListener('change', previewSetup);
+$('#suPlan').onclick = () => $('#importFile').click();
+$('#suSkip').onclick = () => { $('#setup').hidden = true; try { localStorage.setItem('glowup.skipSetup', '1'); } catch (e) { } };
+$('#redoSetup').onclick = openSetup;
+let skipSetup = false; try { skipSetup = localStorage.getItem('glowup.skipSetup') === '1'; } catch (e) { }
+if (!state.recs.has('goals') && !skipSetup) openSetup();
 setInterval(() => { if (state.tab === 'hoy' && !document.hidden) renderNow(); }, 60000);
 })();
